@@ -70,7 +70,7 @@ while true; do
     # Use curl to call the projects/search API.
     # The '-s' flag makes curl silent, and '-u' provides the auth token.
     PROJECTS_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" "${SONAR_URL}/api/projects/search?p=${PAGE}&ps=${PAGE_SIZE}")
-    echo $PROJECTS_RESPONSE
+
     # Use jq to parse the JSON and extract the 'key' for each component.
     # The '-r' flag gives raw string output without quotes.
     # We read the results into an array.
@@ -98,6 +98,7 @@ echo "Found ${#ALL_PROJECT_KEYS[@]} projects. Now fetching the '${METRIC_TO_GET}
 echo "---------------------------------------------------------------------"
 
 # 4. Loop through each project key and get the specified metric
+TOTAL_LOC=0
 for PROJECT_KEY in "${ALL_PROJECT_KEYS[@]}"; do
     # Make the API call to get the measures for the specific project (component).
     MEASURE_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" "${SONAR_URL}/api/measures/component?component=${PROJECT_KEY}&metricKeys=${METRIC_TO_GET}")
@@ -105,11 +106,14 @@ for PROJECT_KEY in "${ALL_PROJECT_KEYS[@]}"; do
     # Parse the JSON response to get the value of the metric.
     # The `// "N/A"` part in jq provides a default value if the path doesn't exist,
     # which can happen if a project hasn't had this measure computed.
-    METRIC_VALUE=$(echo "$MEASURE_RESPONSE" | jq -r ".component.measures[0].value // \"N/A\"")
+    METRIC_VALUE=$(echo "$MEASURE_RESPONSE" | jq -r ".component.measures[0].value // \"0\"")
 
+    # If the metric value is a number, add it to the total.
+    if [[ "$METRIC_VALUE" =~ ^[0-9]+$ ]]; then
+        TOTAL_LOC=$((TOTAL_LOC + METRIC_VALUE))
+    fi
     # Print the result in a nicely formatted table-like structure.
-    printf "Project: %-50s | %s: %s\n" "$PROJECT_KEY" "$METRIC_TO_GET" "$METRIC_VALUE"
+    printf "%s,%s\n" "$PROJECT_KEY" "$METRIC_VALUE"
 done
-
 echo "---------------------------------------------------------------------"
-echo "Script finished."
+echo "Script finished. Total LOC: $TOTAL_LOC"
